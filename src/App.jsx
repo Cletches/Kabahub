@@ -1,141 +1,336 @@
-import React, { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import emailjs from '@emailjs/browser';
+import { EMAILJS_CONFIG } from './emailConfig';
+import { GOOGLE_SHEETS_CONFIG } from './googleSheetsConfig';
 
-// Navbar Component
-const Navbar = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+// Scroll Animation Hook
+const useScrollAnimation = () => {
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('animate-slide-up');
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
 
-  const menuItems = ['Features', 'Pricing', 'Resources', 'About Us', 'Demo', 'Contact'];
+    document.querySelectorAll('.animate-on-scroll').forEach((el) => {
+      observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+};
+
+// Waitlist Modal Component
+const WaitlistModal = ({ isOpen, onClose }) => {
+  const [formData, setFormData] = useState({ name: '', email: '', company: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState({ type: '', message: '' });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setSubmitStatus({ type: '', message: '' });
+
+    try {
+      // Save to Google Sheets if enabled
+      if (GOOGLE_SHEETS_CONFIG.ENABLED && GOOGLE_SHEETS_CONFIG.WEB_APP_URL !== 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+        await fetch(GOOGLE_SHEETS_CONFIG.WEB_APP_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            email: formData.email,
+            company: formData.company,
+            source: 'Website'
+          })
+        });
+      }
+
+      // Send email using EmailJS
+      await emailjs.send(
+        EMAILJS_CONFIG.SERVICE_ID,
+        EMAILJS_CONFIG.TEMPLATE_ID,
+        {
+          from_name: formData.name,
+          from_email: formData.email,
+          company: formData.company,
+          message: `Waitlist signup from ${formData.name} at ${formData.company || 'No company provided'}`,
+          to_email: 'kabahubteam@gmail.com',
+        },
+        EMAILJS_CONFIG.PUBLIC_KEY
+      );
+
+      setSubmitStatus({
+        type: 'success',
+        message: '🎉 Welcome to the waitlist! We\'ll be in touch soon.',
+      });
+      setFormData({ name: '', email: '', company: '' });
+
+      // Close modal after 2 seconds
+      setTimeout(() => {
+        onClose();
+        setSubmitStatus({ type: '', message: '' });
+      }, 2000);
+    } catch (error) {
+      console.error('Waitlist signup failed:', error);
+      setSubmitStatus({
+        type: 'error',
+        message: 'Oops! Something went wrong. Please try again or email us at kabahubteam@gmail.com',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  if (!isOpen) return null;
 
   return (
-    <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md border-b border-gray-200 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                NexaCRM
-              </span>
-            </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+      ></div>
+
+      {/* Modal */}
+      <div className="relative bg-gradient-to-br from-accent-900 via-accent-800 to-neutral-900 rounded-3xl p-8 md:p-12 max-w-lg w-full shadow-2xl border border-primary-400/30 animate-slide-up">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <div className="mb-8">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
+            Join the Waitlist
+          </h2>
+          <p className="text-neutral-300">
+            Be among the first 500 users and get exclusive early access benefits
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              placeholder="Your name *"
+              className="w-full px-5 py-4 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-xl focus:border-primary-400 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all text-white placeholder:text-neutral-400"
+            />
+          </div>
+          <div>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              placeholder="Work email *"
+              className="w-full px-5 py-4 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-xl focus:border-primary-400 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all text-white placeholder:text-neutral-400"
+            />
+          </div>
+          <div>
+            <input
+              type="text"
+              name="company"
+              value={formData.company}
+              onChange={handleChange}
+              placeholder="Company name (optional)"
+              className="w-full px-5 py-4 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-xl focus:border-primary-400 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all text-white placeholder:text-neutral-400"
+            />
           </div>
 
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center space-x-8">
-            {menuItems.map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase().replace(' ', '-')}`}
-                className="text-gray-700 hover:text-blue-600 transition-colors text-sm font-medium"
-              >
-                {item}
-              </a>
-            ))}
-          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={`w-full bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700 text-white py-4 px-6 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${
+              isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            {isSubmitting ? 'Joining...' : 'Join Waitlist'}
+          </button>
 
-          {/* Join Waitlist Button */}
-          <div className="hidden md:block">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-              Join Waitlist
-            </button>
-          </div>
-
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-gray-700 hover:text-blue-600"
+          {submitStatus.message && (
+            <div
+              className={`p-4 rounded-xl text-center ${
+                submitStatus.type === 'success'
+                  ? 'bg-green-500/20 border border-green-500/50 text-green-100'
+                  : 'bg-red-500/20 border border-red-500/50 text-red-100'
+              }`}
             >
-              <svg
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                {isMenuOpen ? (
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                ) : (
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 6h16M4 12h16M4 18h16"
-                  />
-                )}
-              </svg>
+              {submitStatus.message}
+            </div>
+          )}
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Minimal Navbar Component
+const Navbar = ({ onWaitlistClick }) => {
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return (
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        isScrolled ? 'bg-white/90 backdrop-blur-lg border-b border-neutral-200' : 'bg-transparent'
+      }`}
+    >
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        <div className="flex justify-between items-center h-20">
+          <div className="flex-shrink-0">
+            <span className={`text-2xl font-bold transition-colors ${
+              isScrolled
+                ? 'bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text text-transparent'
+                : 'text-white'
+            }`}>
+              KabaHub
+            </span>
+          </div>
+
+          <div className="hidden md:flex items-center space-x-10">
+            <a href="#features" className={`transition-colors text-sm font-medium ${
+              isScrolled ? 'text-neutral-600 hover:text-neutral-900' : 'text-white/90 hover:text-white'
+            }`}>
+              Features
+            </a>
+            <a href="#pricing" className={`transition-colors text-sm font-medium ${
+              isScrolled ? 'text-neutral-600 hover:text-neutral-900' : 'text-white/90 hover:text-white'
+            }`}>
+              Pricing
+            </a>
+            <a href="#about-us" className={`transition-colors text-sm font-medium ${
+              isScrolled ? 'text-neutral-600 hover:text-neutral-900' : 'text-white/90 hover:text-white'
+            }`}>
+              About
+            </a>
+            <a href="#contact" className={`transition-colors text-sm font-medium ${
+              isScrolled ? 'text-neutral-600 hover:text-neutral-900' : 'text-white/90 hover:text-white'
+            }`}>
+              Contact
+            </a>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onWaitlistClick}
+              className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all transform hover:scale-105 ${
+              isScrolled
+                ? 'bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700 text-white shadow-lg hover:shadow-xl'
+                : 'bg-white/10 backdrop-blur-md hover:bg-white/20 text-white border border-white/30'
+            }`}>
+              Join Waitlist
             </button>
           </div>
         </div>
-
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div className="md:hidden py-4 border-t border-gray-200">
-            {menuItems.map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase().replace(' ', '-')}`}
-                className="block py-2 text-gray-700 hover:text-blue-600 transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                {item}
-              </a>
-            ))}
-            <button className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">
-              Join Waitlist
-            </button>
-          </div>
-        )}
       </div>
     </nav>
   );
 };
 
-// Hero Section Component
-const Hero = () => {
+// Hero Section - Full Viewport Centered with Animated Blue-Black Background
+const Hero = ({ onWaitlistClick }) => {
   return (
-    <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-50 to-white">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
-              The CRM Built for{' '}
-              <span className="bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                Growing Teams
+    <section className="relative min-h-screen flex items-center justify-center px-6 pt-20 overflow-hidden">
+      {/* Animated Blue-Black Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-900 via-accent-800 to-neutral-900">
+        {/* Animated Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-tr from-primary-900/40 via-primary-600/20 to-accent-900/40 animate-pulse" style={{ animationDuration: '8s' }}></div>
+
+        {/* Abstract Blurred Patterns */}
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }}></div>
+      </div>
+
+      {/* Overlay for Depth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent-900/50 to-accent-900/80 backdrop-blur-sm"></div>
+
+      {/* Content - High Contrast Typography */}
+      <div className="relative z-10 max-w-5xl mx-auto text-center">
+        <div className="animate-fade-in">
+          <div className="inline-block mb-6">
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-500/20 backdrop-blur-md text-primary-200 text-sm font-medium border border-primary-400/30 shadow-lg">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-300 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-400"></span>
               </span>
-            </h1>
-            <p className="text-xl text-gray-600 mb-8">
-              Manage clients, track sales, and scale operations seamlessly.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-medium transition-colors shadow-lg hover:shadow-xl">
-                Join Waitlist
-              </button>
-              <button className="border-2 border-gray-300 hover:border-blue-600 text-gray-700 hover:text-blue-600 px-8 py-4 rounded-lg font-medium transition-colors">
-                Watch Demo Video
-              </button>
-            </div>
+              Now accepting early access users
+            </span>
           </div>
-          <div className="relative">
-            <div className="bg-gradient-to-br from-blue-100 to-blue-50 rounded-2xl p-8 shadow-2xl">
-              <div className="bg-white rounded-lg p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="h-3 w-24 bg-gray-200 rounded"></div>
-                  <div className="h-3 w-16 bg-gray-200 rounded"></div>
-                </div>
-                <div className="space-y-3">
-                  <div className="h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg"></div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="h-12 bg-gray-100 rounded"></div>
-                    <div className="h-12 bg-gray-100 rounded"></div>
-                    <div className="h-12 bg-gray-100 rounded"></div>
-                  </div>
-                  <div className="h-24 bg-gray-100 rounded-lg"></div>
-                </div>
-              </div>
+
+          <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold text-white leading-tight mb-8 tracking-tight drop-shadow-2xl">
+            The CRM Built for
+            <span className="block bg-gradient-to-r from-primary-400 via-primary-300 to-primary-500 bg-clip-text text-transparent">
+              Growing Teams
+            </span>
+          </h1>
+
+          <p className="text-xl md:text-2xl text-neutral-200 mb-12 max-w-3xl mx-auto leading-relaxed font-light drop-shadow-lg">
+            Complete customer management platform with sales pipelines, marketing automation, and powerful analytics—all in one place.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+            <button
+              onClick={onWaitlistClick}
+              className="group w-full sm:w-auto bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 text-white px-10 py-5 rounded-full text-lg font-semibold transition-all transform hover:scale-105 shadow-2xl hover:shadow-primary-500/50">
+              Join Waitlist
+              <span className="inline-block ml-2 group-hover:translate-x-1 transition-transform">→</span>
+            </button>
+            <a
+              href="#demo"
+              className="group w-full sm:w-auto bg-white/10 backdrop-blur-md hover:bg-white/20 text-white px-10 py-5 rounded-full text-lg font-semibold border-2 border-white/30 hover:border-white/50 transition-all shadow-xl inline-flex items-center justify-center">
+              Watch Demo
+              <span className="inline-block ml-2 group-hover:scale-110 transition-transform">▶</span>
+            </a>
+          </div>
+
+          <div className="flex items-center justify-center gap-8 md:gap-12 text-sm text-neutral-300 flex-wrap">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+              </svg>
+              14 Powerful Modules
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+              </svg>
+              Full Automation
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+              </svg>
+              Enterprise Ready
             </div>
           </div>
         </div>
@@ -144,63 +339,62 @@ const Hero = () => {
   );
 };
 
-// Features Section Component
+// Features Section - Minimal Cards with Hover Animations
 const Features = () => {
   const features = [
-    {
-      icon: '👥',
-      title: 'Customer Management',
-      description: 'Organize and track all customer interactions in one centralized platform.'
-    },
-    {
-      icon: '📊',
-      title: 'Pipeline & Deal Tracking',
-      description: 'Visualize your sales pipeline and move deals through stages effortlessly.'
-    },
-    {
-      icon: '🤝',
-      title: 'Team Collaboration',
-      description: 'Work together seamlessly with real-time updates and shared insights.'
-    },
-    {
-      icon: '📈',
-      title: 'Analytics & Reports',
-      description: 'Get actionable insights with customizable reports and dashboards.'
-    },
-    {
-      icon: '🔗',
-      title: 'Integrations',
-      description: 'Connect with your favorite tools and automate workflows.'
-    },
-    {
-      icon: '⚡',
-      title: 'Automation',
-      description: 'Save time with smart automation for repetitive tasks and follow-ups.'
-    }
+    { icon: '👥', title: 'Contacts', description: 'Central hub for customer relationships with complete interaction history and activity timelines.' },
+    { icon: '📧', title: 'Email', description: 'Unified inbox for client communication with templates and automated campaign sequences.' },
+    { icon: '📅', title: 'Calendar', description: 'Never miss a meeting with Google/Outlook sync and shareable booking links.' },
+    { icon: '📢', title: 'Marketing', description: 'Track campaigns from visitors to customers with visual funnels and performance metrics.' },
+    { icon: '💼', title: 'Sales Deals', description: 'Kanban pipeline from prospect to close with revenue forecasting and quote builder.' },
+    { icon: '🏢', title: 'Companies', description: 'Manage B2B relationships with linked contacts, deals, and health scores.' },
+    { icon: '📊', title: 'Dashboard', description: 'Real-time business performance with KPIs, revenue tracking, and team leaderboards.' },
+    { icon: '🎧', title: 'Service Desk', description: 'Simplified support with ticket management, priorities, SLAs, and live chat.' },
+    { icon: '⚡', title: 'Automation', description: 'Workflow builder with triggers and actions to eliminate repetitive tasks.' },
+    { icon: '💬', title: 'Conversations', description: 'Unified inbox for chat, email, SMS, WhatsApp, and social media DMs.' },
+    { icon: '📈', title: 'Reports', description: 'Detailed insights with pipeline reports, revenue trends, and win/loss analysis.' },
+    { icon: '🔧', title: 'Developments', description: 'Customize fields, manage integrations, API permissions, and beta features.' },
+    { icon: '📉', title: 'Analytics', description: 'Advanced analytics with cohort analysis, attribution, and lifetime value.' },
+    { icon: '🕒', title: 'Activities', description: 'Real-time team visibility with timeline of all CRM actions and task management.' },
   ];
 
   return (
-    <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            Everything you need to grow
+    <section id="features" className="relative py-32 px-6 overflow-hidden">
+      {/* Animated Blue-Black Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-900 via-accent-800 to-neutral-900">
+        <div className="absolute inset-0 bg-gradient-to-tr from-primary-900/40 via-primary-600/20 to-accent-900/40 animate-pulse" style={{ animationDuration: '8s' }}></div>
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }}></div>
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent-900/50 to-accent-900/80 backdrop-blur-sm"></div>
+
+      <div className="relative z-10 max-w-7xl mx-auto">
+        <div className="text-center mb-20 animate-on-scroll opacity-0">
+          <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight drop-shadow-2xl">
+            14 Powerful Modules
           </h2>
-          <p className="text-xl text-gray-600">
-            Powerful features designed for modern sales teams
+          <p className="text-xl text-neutral-200 max-w-2xl mx-auto font-light drop-shadow-lg">
+            Everything you need to manage customers, close deals, and grow your business
           </p>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {features.map((feature, index) => (
             <div
               key={index}
-              className="bg-gray-50 rounded-xl p-8 hover:shadow-lg transition-shadow border border-gray-100 hover:border-blue-200"
+              className="animate-on-scroll opacity-0 group relative bg-white/10 backdrop-blur-md hover:bg-white/20 p-8 rounded-3xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 border border-white/20 hover:border-primary-400/50"
+              style={{ animationDelay: `${index * 50}ms` }}
             >
-              <div className="text-4xl mb-4">{feature.icon}</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">
+              <div className="text-5xl mb-4 group-hover:scale-110 transition-transform duration-300">
+                {feature.icon}
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-3">
                 {feature.title}
               </h3>
-              <p className="text-gray-600">{feature.description}</p>
+              <p className="text-sm text-neutral-200 leading-relaxed">
+                {feature.description}
+              </p>
             </div>
           ))}
         </div>
@@ -209,99 +403,148 @@ const Features = () => {
   );
 };
 
-// Demo Video Section Component
+// Demo Video Section - Centered Card
 const DemoVideo = () => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef(null);
+
+  const handlePlayClick = () => {
+    setIsPlaying(true);
+    if (videoRef.current) {
+      videoRef.current.play();
+    }
+  };
+
   return (
-    <section id="demo" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-50 to-white">
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
-            See NexaCRM in Action
+    <section id="demo" className="relative py-32 px-6 overflow-hidden">
+      {/* Animated Blue-Black Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-900 via-accent-800 to-neutral-900">
+        <div className="absolute inset-0 bg-gradient-to-tr from-primary-900/40 via-primary-600/20 to-accent-900/40 animate-pulse" style={{ animationDuration: '8s' }}></div>
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }}></div>
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent-900/50 to-accent-900/80 backdrop-blur-sm"></div>
+
+      <div className="relative z-10 max-w-6xl mx-auto">
+        <div className="text-center mb-16 animate-on-scroll opacity-0">
+          <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight drop-shadow-2xl">
+            See KabaHub in Action
           </h2>
-          <p className="text-xl text-gray-600">
-            See how NexaCRM helps your team close more deals in less time.
+          <p className="text-xl text-neutral-200 max-w-2xl mx-auto font-light drop-shadow-lg">
+            Watch how teams close more deals and scale operations effortlessly
           </p>
         </div>
-        <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900 aspect-video">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <button className="bg-white hover:bg-gray-100 rounded-full p-6 shadow-lg transition-transform hover:scale-110">
-              <svg
-                className="w-12 h-12 text-blue-600"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </button>
-          </div>
-          <div className="w-full h-full bg-gradient-to-br from-blue-900 to-blue-700"></div>
+
+        <div className="animate-on-scroll opacity-0 relative rounded-3xl overflow-hidden shadow-2xl hover:shadow-3xl transition-shadow duration-500 aspect-video group">
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            controls
+            playsInline
+            preload="metadata"
+          >
+            <source src="/KabaHub/media/demo-video.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+
+          {!isPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center z-10 bg-gradient-to-br from-primary-900/60 to-accent-900/60 cursor-pointer" onClick={handlePlayClick}>
+              <button className="bg-white hover:bg-neutral-100 rounded-full p-8 shadow-2xl transition-all transform group-hover:scale-110 duration-300">
+                <svg className="w-16 h-16 text-primary-600" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </section>
   );
 };
 
-// Pricing Section Component
-const Pricing = () => {
+// Pricing Section - Modern 3-Column Layout
+const Pricing = ({ onWaitlistClick }) => {
   const plans = [
     {
       name: 'Starter',
-      description: 'Perfect for small teams getting started',
+      description: 'Perfect for small teams',
       price: 'Coming Soon',
-      features: ['Up to 5 users', 'Basic CRM features', 'Email support', '1GB storage']
+      features: ['Up to 5 users', 'Core CRM features', 'Email support', '5GB storage', 'Basic integrations'],
     },
     {
       name: 'Growth',
-      description: 'For growing teams that need more power',
+      description: 'For scaling businesses',
       price: 'Coming Soon',
-      features: ['Up to 25 users', 'Advanced analytics', 'Priority support', '10GB storage', 'Custom integrations'],
-      highlighted: true
+      features: ['Up to 50 users', 'Advanced analytics', 'Priority support', '50GB storage', 'Custom integrations', 'Automation workflows'],
+      highlighted: true,
     },
     {
       name: 'Enterprise',
-      description: 'For large organizations with custom needs',
+      description: 'For large organizations',
       price: 'Custom',
-      features: ['Unlimited users', 'Enterprise features', 'Dedicated support', 'Unlimited storage', 'Custom solutions']
-    }
+      features: ['Unlimited users', 'Enterprise features', 'Dedicated support', 'Unlimited storage', 'Custom solutions', 'SLA guarantee'],
+    },
   ];
 
   return (
-    <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+    <section id="pricing" className="relative py-32 px-6 overflow-hidden">
+      {/* Animated Blue-Black Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-900 via-accent-800 to-neutral-900">
+        <div className="absolute inset-0 bg-gradient-to-tr from-primary-900/40 via-primary-600/20 to-accent-900/40 animate-pulse" style={{ animationDuration: '8s' }}></div>
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }}></div>
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent-900/50 to-accent-900/80 backdrop-blur-sm"></div>
+
+      <div className="relative z-10 max-w-7xl mx-auto">
+        <div className="text-center mb-20 animate-on-scroll opacity-0">
+          <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight drop-shadow-2xl">
             Simple, Transparent Pricing
           </h2>
-          <p className="text-xl text-gray-600">
-            Choose the plan that fits your team
+          <p className="text-xl text-neutral-200 max-w-2xl mx-auto font-light drop-shadow-lg">
+            Choose the plan that scales with your team
           </p>
         </div>
-        <div className="grid md:grid-cols-3 gap-8">
+
+        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {plans.map((plan, index) => (
             <div
               key={index}
-              className={`rounded-2xl p-8 ${
+              className={`animate-on-scroll opacity-0 relative rounded-3xl p-10 transition-all duration-300 ${
                 plan.highlighted
-                  ? 'bg-blue-600 text-white shadow-2xl scale-105'
-                  : 'bg-gray-50 border border-gray-200'
+                  ? 'bg-gradient-to-br from-primary-600 to-accent-600 text-white shadow-2xl scale-105 hover:scale-110'
+                  : 'bg-white/10 backdrop-blur-md border-2 border-white/20 hover:border-primary-400/50 hover:shadow-xl hover:bg-white/20'
               }`}
+              style={{ animationDelay: `${index * 100}ms` }}
             >
-              <h3 className={`text-2xl font-bold mb-2 ${plan.highlighted ? 'text-white' : 'text-gray-900'}`}>
+              {plan.highlighted && (
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                  <span className="bg-accent-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
+                    Most Popular
+                  </span>
+                </div>
+              )}
+
+              <h3 className={`text-2xl font-bold mb-2 ${plan.highlighted ? 'text-white' : 'text-white'}`}>
                 {plan.name}
               </h3>
-              <p className={`mb-6 ${plan.highlighted ? 'text-blue-100' : 'text-gray-600'}`}>
+              <p className={`mb-8 ${plan.highlighted ? 'text-primary-100' : 'text-neutral-200'}`}>
                 {plan.description}
               </p>
-              <div className="mb-6">
-                <span className={`text-4xl font-bold ${plan.highlighted ? 'text-white' : 'text-gray-900'}`}>
+
+              <div className="mb-8">
+                <span className={`text-5xl font-bold ${plan.highlighted ? 'text-white' : 'text-white'}`}>
                   {plan.price}
                 </span>
               </div>
-              <ul className="space-y-3 mb-8">
+
+              <ul className="space-y-4 mb-10">
                 {plan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-center">
+                  <li key={idx} className="flex items-start gap-3">
                     <svg
-                      className={`w-5 h-5 mr-3 ${plan.highlighted ? 'text-blue-200' : 'text-blue-600'}`}
+                      className={`w-6 h-6 flex-shrink-0 mt-0.5 ${plan.highlighted ? 'text-primary-200' : 'text-primary-400'}`}
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
@@ -311,17 +554,19 @@ const Pricing = () => {
                         clipRule="evenodd"
                       />
                     </svg>
-                    <span className={plan.highlighted ? 'text-blue-100' : 'text-gray-700'}>
+                    <span className={plan.highlighted ? 'text-primary-100' : 'text-neutral-200'}>
                       {feature}
                     </span>
                   </li>
                 ))}
               </ul>
+
               <button
-                className={`w-full py-3 px-6 rounded-lg font-medium transition-colors ${
+                onClick={onWaitlistClick}
+                className={`w-full py-4 px-6 rounded-full font-semibold transition-all transform hover:scale-105 ${
                   plan.highlighted
-                    ? 'bg-white text-blue-600 hover:bg-gray-100'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                    ? 'bg-white text-primary-600 hover:bg-neutral-100 shadow-xl'
+                    : 'bg-gradient-to-r from-primary-600 to-accent-600 text-white hover:from-primary-700 hover:to-accent-700 shadow-lg'
                 }`}
               >
                 Join Waitlist
@@ -334,106 +579,74 @@ const Pricing = () => {
   );
 };
 
-// Resources Section Component
-const Resources = () => {
-  const resources = [
-    {
-      icon: '📝',
-      title: 'Blog',
-      description: 'Latest insights and best practices',
-      link: '#'
-    },
-    {
-      icon: '❓',
-      title: 'Help Center',
-      description: 'Get answers to your questions',
-      link: '#'
-    },
-    {
-      icon: '🚀',
-      title: 'Product Updates',
-      description: 'Stay updated with new features',
-      link: '#'
-    }
-  ];
 
-  return (
-    <section id="resources" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">Resources</h2>
-          <p className="text-xl text-gray-600">
-            Everything you need to succeed with NexaCRM
-          </p>
-        </div>
-        <div className="grid md:grid-cols-3 gap-8">
-          {resources.map((resource, index) => (
-            <a
-              key={index}
-              href={resource.link}
-              className="bg-white rounded-xl p-8 hover:shadow-lg transition-all border border-gray-200 hover:border-blue-300 group"
-            >
-              <div className="text-4xl mb-4">{resource.icon}</div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2 group-hover:text-blue-600">
-                {resource.title}
-              </h3>
-              <p className="text-gray-600">{resource.description}</p>
-            </a>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// About Us Section Component
+// About Us Section - Minimal
 const AboutUs = () => {
   return (
-    <section id="about-us" className="py-20 px-4 sm:px-6 lg:px-8 bg-white">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">
-              About NexaCRM
-            </h2>
-            <p className="text-lg text-gray-600 mb-6">
-              We're on a mission to empower growing teams with the tools they need to build lasting customer relationships and drive sustainable growth.
-            </p>
-            <p className="text-lg text-gray-600 mb-6">
-              Built by a team of sales professionals and software engineers, NexaCRM combines powerful features with an intuitive interface that your team will actually love to use.
-            </p>
-            <p className="text-lg text-gray-600">
-              Join thousands of teams who are transforming the way they manage customer relationships.
-            </p>
-          </div>
-          <div className="relative">
-            <div className="bg-gradient-to-br from-blue-100 to-blue-50 rounded-2xl p-8 aspect-square flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-4">🎯</div>
-                <p className="text-gray-700 font-medium">Our Mission</p>
-                <p className="text-gray-600 mt-2">Empowering teams to grow</p>
-              </div>
-            </div>
-          </div>
-        </div>
+    <section id="about-us" className="relative py-32 px-6 overflow-hidden">
+      {/* Animated Blue-Black Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-900 via-accent-800 to-neutral-900">
+        <div className="absolute inset-0 bg-gradient-to-tr from-primary-900/40 via-primary-600/20 to-accent-900/40 animate-pulse" style={{ animationDuration: '8s' }}></div>
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }}></div>
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent-900/50 to-accent-900/80 backdrop-blur-sm"></div>
+
+      <div className="relative z-10 max-w-4xl mx-auto text-center animate-on-scroll opacity-0">
+        <h2 className="text-5xl md:text-6xl font-bold text-white mb-8 tracking-tight drop-shadow-2xl">
+          Built for Growth
+        </h2>
+        <p className="text-xl text-neutral-200 leading-relaxed mb-8 font-light drop-shadow-lg">
+          We're on a mission to empower teams with tools that build lasting customer relationships and drive sustainable growth.
+        </p>
+        <p className="text-xl text-neutral-200 leading-relaxed font-light drop-shadow-lg">
+          Combining powerful features with intuitive design, KabaHub is transforming how thousands of teams manage customer relationships.
+        </p>
       </div>
     </section>
   );
 };
 
-// Contact Section Component
+// Contact Section - Modern Form
 const Contact = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    message: ''
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState({ type: '', message: '' });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form submitted:', formData);
-    alert('Thank you! We\'ll get back to you soon.');
-    setFormData({ name: '', email: '', message: '' });
+    setIsSubmitting(true);
+    setSubmitStatus({ type: '', message: '' });
+
+    try {
+      // Send email using EmailJS
+      await emailjs.send(
+        EMAILJS_CONFIG.SERVICE_ID,
+        EMAILJS_CONFIG.TEMPLATE_ID,
+        {
+          from_name: formData.name,
+          from_email: formData.email,
+          message: formData.message,
+          to_email: 'kabahubteam@gmail.com',
+        },
+        EMAILJS_CONFIG.PUBLIC_KEY
+      );
+
+      setSubmitStatus({
+        type: 'success',
+        message: 'Thank you! We\'ll get back to you soon.',
+      });
+      setFormData({ name: '', email: '', message: '' });
+    } catch (error) {
+      console.error('Email send failed:', error);
+      setSubmitStatus({
+        type: 'error',
+        message: 'Oops! Something went wrong. Please try again or email us directly at kabahubteam@gmail.com',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -441,150 +654,155 @@ const Contact = () => {
   };
 
   return (
-    <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+    <section id="contact" className="relative py-32 px-6 overflow-hidden">
+      {/* Animated Blue-Black Gradient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-900 via-accent-800 to-neutral-900">
+        <div className="absolute inset-0 bg-gradient-to-tr from-primary-900/40 via-primary-600/20 to-accent-900/40 animate-pulse" style={{ animationDuration: '8s' }}></div>
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-500/30 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-600/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s', animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '9s', animationDelay: '2s' }}></div>
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent-900/50 to-accent-900/80 backdrop-blur-sm"></div>
+
+      <div className="relative z-10 max-w-2xl mx-auto">
+        <div className="text-center mb-16 animate-on-scroll opacity-0">
+          <h2 className="text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight drop-shadow-2xl">
             Get in Touch
           </h2>
-          <p className="text-xl text-gray-600">
-            Have questions? We'd love to hear from you.
+          <p className="text-xl text-neutral-200 font-light drop-shadow-lg">
+            Have questions? We'd love to hear from you
           </p>
         </div>
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Name
-              </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="Your name"
-              />
-            </div>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="your.email@example.com"
-              />
-            </div>
-            <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-2">
-                Message
-              </label>
-              <textarea
-                id="message"
-                name="message"
-                value={formData.message}
-                onChange={handleChange}
-                required
-                rows="5"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
-                placeholder="Tell us how we can help..."
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg font-medium transition-colors"
-            >
-              Send Message
-            </button>
-          </form>
-          <div className="mt-8 pt-8 border-t border-gray-200 text-center">
-            <p className="text-gray-600">
-              Or reach us at{' '}
-              <a href="mailto:support@nexacrm.com" className="text-blue-600 hover:text-blue-700 font-medium">
-                support@nexacrm.com
-              </a>
-            </p>
+
+        <form onSubmit={handleSubmit} className="animate-on-scroll opacity-0 space-y-6">
+          <div>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              placeholder="Your name"
+              className="w-full px-6 py-4 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-2xl focus:border-primary-400 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all text-white placeholder:text-neutral-300"
+            />
           </div>
-        </div>
+          <div>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              placeholder="your.email@example.com"
+              className="w-full px-6 py-4 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-2xl focus:border-primary-400 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all text-white placeholder:text-neutral-300"
+            />
+          </div>
+          <div>
+            <textarea
+              name="message"
+              value={formData.message}
+              onChange={handleChange}
+              required
+              rows="6"
+              placeholder="Tell us how we can help..."
+              className="w-full px-6 py-4 bg-white/10 backdrop-blur-md border-2 border-white/20 rounded-2xl focus:border-primary-400 focus:ring-4 focus:ring-primary-500/30 outline-none transition-all resize-none text-white placeholder:text-neutral-300"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className={`w-full bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700 text-white py-5 px-6 rounded-2xl font-semibold transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${
+              isSubmitting ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            {isSubmitting ? 'Sending...' : 'Send Message'}
+          </button>
+
+          {submitStatus.message && (
+            <div
+              className={`p-4 rounded-xl ${
+                submitStatus.type === 'success'
+                  ? 'bg-green-500/20 border border-green-500/50 text-green-100'
+                  : 'bg-red-500/20 border border-red-500/50 text-red-100'
+              }`}
+            >
+              {submitStatus.message}
+            </div>
+          )}
+
+          <p className="text-center text-neutral-200 pt-6 drop-shadow-lg">
+            Or email us at{' '}
+            <a href="mailto:kabahubteam@gmail.com" className="text-primary-400 hover:text-primary-300 font-semibold">
+              kabahubteam@gmail.com
+            </a>
+          </p>
+        </form>
       </div>
     </section>
   );
 };
 
-// Footer Component
-const Footer = () => {
-  const socialLinks = [
-    { name: 'Twitter', icon: '𝕏', link: '#' },
-    { name: 'LinkedIn', icon: '💼', link: '#' },
-    { name: 'GitHub', icon: '👨‍💻', link: '#' },
-    { name: 'Facebook', icon: '👥', link: '#' }
-  ];
-
+// Footer - Slim and Minimal
+const Footer = ({ onWaitlistClick }) => {
   return (
-    <footer className="bg-gray-900 text-white py-16 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        {/* CTA Section */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-12 text-center mb-12">
-          <h3 className="text-3xl font-bold mb-4">
-            Be among the first 500 users to try NexaCRM
+    <footer className="relative bg-gradient-to-b from-accent-900 to-neutral-900 text-white py-16 px-6 overflow-hidden">
+      {/* Subtle background effects */}
+      <div className="absolute inset-0">
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-accent-600/10 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="relative z-10 max-w-7xl mx-auto">
+        {/* Final CTA */}
+        <div className="text-center mb-16 pb-16 border-b border-white/10">
+          <h3 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight drop-shadow-xl">
+            Be among the first 500 users
           </h3>
-          <p className="text-blue-100 mb-6 text-lg">
+          <p className="text-xl text-neutral-300 mb-8 font-light drop-shadow-lg">
             Get exclusive early access and special launch pricing
           </p>
-          <button className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 rounded-lg font-medium transition-colors shadow-lg">
-            Join Waitlist Now
+          <button
+            onClick={onWaitlistClick}
+            className="bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 text-white px-10 py-5 rounded-full font-semibold transition-all transform hover:scale-105 shadow-xl">
+            Join Waitlist Now →
           </button>
         </div>
 
-        <div className="grid md:grid-cols-4 gap-8 mb-12">
+        {/* Footer Links */}
+        <div className="grid md:grid-cols-4 gap-12 mb-12">
           <div className="md:col-span-2">
-            <h4 className="text-2xl font-bold mb-4">NexaCRM</h4>
-            <p className="text-gray-400 mb-4">
+            <h4 className="text-2xl font-bold mb-4 bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
+              KabaHub
+            </h4>
+            <p className="text-neutral-300 font-light leading-relaxed">
               The CRM built for growing teams. Manage clients, track sales, and scale operations seamlessly.
             </p>
           </div>
           <div>
-            <h5 className="font-semibold mb-4">Product</h5>
-            <ul className="space-y-2 text-gray-400">
-              <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-              <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
-              <li><a href="#demo" className="hover:text-white transition-colors">Demo</a></li>
+            <h5 className="font-semibold mb-4 text-neutral-200">Product</h5>
+            <ul className="space-y-3 text-neutral-400">
+              <li><a href="#features" className="hover:text-neutral-200 transition-colors">Features</a></li>
+              <li><a href="#pricing" className="hover:text-neutral-200 transition-colors">Pricing</a></li>
+              <li><a href="#demo" className="hover:text-neutral-200 transition-colors">Demo</a></li>
             </ul>
           </div>
           <div>
-            <h5 className="font-semibold mb-4">Company</h5>
-            <ul className="space-y-2 text-gray-400">
-              <li><a href="#about-us" className="hover:text-white transition-colors">About Us</a></li>
-              <li><a href="#resources" className="hover:text-white transition-colors">Resources</a></li>
-              <li><a href="#contact" className="hover:text-white transition-colors">Contact</a></li>
+            <h5 className="font-semibold mb-4 text-neutral-200">Company</h5>
+            <ul className="space-y-3 text-neutral-400">
+              <li><a href="#about-us" className="hover:text-neutral-200 transition-colors">About</a></li>
+              <li><a href="#contact" className="hover:text-neutral-200 transition-colors">Contact</a></li>
             </ul>
           </div>
         </div>
 
-        {/* Social Links */}
-        <div className="flex justify-center space-x-6 mb-8">
-          {socialLinks.map((social, index) => (
-            <a
-              key={index}
-              href={social.link}
-              className="text-2xl hover:text-blue-400 transition-colors"
-              aria-label={social.name}
-            >
-              {social.icon}
-            </a>
-          ))}
-        </div>
-
-        <div className="border-t border-gray-800 pt-8 text-center text-gray-400">
-          <p>&copy; 2025 NexaCRM. All rights reserved.</p>
+        {/* Social Links & Copyright */}
+        <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6">
+          <p className="text-neutral-400 text-sm">© 2025 KabaHub. All rights reserved.</p>
+          <div className="flex items-center gap-6">
+            <a href="#" className="text-neutral-400 hover:text-primary-400 transition-colors text-2xl">𝕏</a>
+            <a href="#" className="text-neutral-400 hover:text-primary-400 transition-colors text-2xl">💼</a>
+            <a href="#" className="text-neutral-400 hover:text-primary-400 transition-colors text-2xl">👨‍💻</a>
+          </div>
         </div>
       </div>
     </footer>
@@ -593,17 +811,23 @@ const Footer = () => {
 
 // Main App Component
 function App() {
+  useScrollAnimation();
+  const [isWaitlistOpen, setIsWaitlistOpen] = useState(false);
+
+  const openWaitlist = () => setIsWaitlistOpen(true);
+  const closeWaitlist = () => setIsWaitlistOpen(false);
+
   return (
-    <div className="min-h-screen bg-white">
-      <Navbar />
-      <Hero />
+    <div className="min-h-screen bg-gradient-to-b from-accent-900 to-neutral-900 antialiased">
+      <Navbar onWaitlistClick={openWaitlist} />
+      <Hero onWaitlistClick={openWaitlist} />
       <Features />
       <DemoVideo />
-      <Pricing />
-      <Resources />
+      <Pricing onWaitlistClick={openWaitlist} />
       <AboutUs />
       <Contact />
-      <Footer />
+      <Footer onWaitlistClick={openWaitlist} />
+      <WaitlistModal isOpen={isWaitlistOpen} onClose={closeWaitlist} />
     </div>
   );
 }
